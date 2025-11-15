@@ -1,13 +1,8 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-"""
-Converted from Jupyter Notebook: nifty50-selling.ipynb
-Conversion Date: 2025-10-28T16:50:43.273Z
-"""
 
-# %pip install nsepython
-# %pip install nsetools
-# %pip install pandas_ta
+import yfinance as yf
+import pandas as pd
+import numpy as np
+
 
 #FNO Stocks
 symbols = [
@@ -48,82 +43,58 @@ symbols = [
 ]
 
 
-#from nsepython import nse_eq,  nse_quote, nse_results
-import yfinance as yf
-import pandas as pd
-import pandas_ta as ta
-from nsetools import Nse
-from nsetools import nse
-
-#results = nse_results('LT.NS',str = "Quaterly")
 
 
-# Read Nifty FnO stock symbols (or your custom list)
+def find_swing_points(series, window=3):
+    """Return swing highs and lows indices."""
+    highs = series[(series.shift(1) < series) & (series.shift(-1) < series)]
+    lows  = series[(series.shift(1) > series) & (series.shift(-1) > series)]
+    return highs, lows
+
+def detect_near_zones(symbol, percent_threshold=2):
+    df = yf.download(symbol, period="6mo", interval="1d", progress=False,auto_adjust=True)
+    df.dropna(inplace=True)
+
+    # Step 1: find swing highs/lows
+    highs, lows = find_swing_points(df['High'])
+    swing_highs = df.loc[highs.index].tail(3)['High'].values
+    swing_lows = df.loc[lows.index].tail(3)['Low'].values
+
+    # Step 2: get latest price
+    last_price = df['Close'].iloc[-1]
+
+    # Step 3: find nearest support/resistance
+    near_support = any(abs(last_price - s) / s < percent_threshold/100 for s in swing_lows)
+    near_resistance = any(abs(last_price - r) / r < percent_threshold/100 for r in swing_highs)
+
+    # Step 4: classify
+    if near_support:
+        zone = "Near Support"
+    elif near_resistance:
+        zone = "Near Resistance"
+    else:
+        zone = None
+
+    return zone, last_price, swing_highs, swing_lows
 
 
-momentum_candidates = []
-cross_up_candidates = []
-rsi_rising_candidates= []
-divergence_candidates= []
+# Example: run on multiple stocks
+tickers = symbols
+results = []
 
-
-for symbol in symbols:
+for t in tickers:
     try:
-        # Get last 100 days data
-        df = yf.download(symbol , period="1y", interval="1d", progress=False, auto_adjust=True)
-        df.dropna(inplace=True)
-        df.columns = df.columns.get_level_values(0)
-
-        # Calculate 20 & 50 SMA
-        df['SMA20'] = ta.sma(df['Close'], 20)
-        df['SMA50'] = ta.sma(df['Close'], 50)
-
-        # Calculate RSI
-        df['RSI'] = ta.rsi(df['Close'], 14)
-
-        # Condition 1: 20MA crossed above 50MA today
-        cross_up = (df['SMA20'].iloc[-1] > df['SMA50'].iloc[-1]) and (df['SMA20'].iloc[-2] <= df['SMA50'].iloc[-2])
-
-
-        # Condition 2: RSI rising toward 70
-        rsi_rising = df['RSI'].iloc[-1] > 60 and df['RSI'].iloc[-1] > df['RSI'].iloc[-2]
-
-
-
-        # Condition 3: Positive divergence (Price lower low but RSI higher low)
-        recent = df.tail(20)
-
-        price_div = recent['Close'].iloc[-1] > recent['Close'].min()
-        rsi_div = recent['RSI'].iloc[-1] > recent['RSI'].min()
-        divergence = rsi_div and not price_div
-
-        #print(f"Symbol - {symbol} | cross_up - {cross_up} | divergence - {divergence}")
-
-        # Condition 4: EPS increasing (Fundamentals)
-        #fundamentals = get_nse_fundamentals(symbol)
-        # Assuming EPS is available and accessible like this based on common API structures
-        #eps = fundamentals.get("EPS", {}).get("current", None)
-        #prev_eps = fundamentals.get("EPS", {}).get("previous", None) # Adjust key based on actual API response
-
-        #eps_increasing = eps and prev_eps and float(eps) > float(prev_eps)
-        if cross_up:
-            cross_up_candidates.append(symbol)
-
-        if rsi_rising:
-            rsi_rising_candidates.append(symbol)
-
-        if divergence:
-            divergence_candidates.append(symbol)
-
-        # Combine filters
-        if cross_up and rsi_rising and divergence :
-            momentum_candidates.append(symbol)
-
+        zone, price, resistances, supports = detect_near_zones(t, percent_threshold=2)
+        if zone:
+            results.append({
+                "Symbol": t,
+                "Price": round(price, 2),
+                "Zone": zone,
+                "Supports": supports,
+                "Resistances": resistances
+            })
     except Exception as e:
-        print(e)
         continue
 
-print("20 MA Cross up Stocks:", cross_up_candidates)
-print("RSI Rising Stocks:", rsi_rising_candidates)
-print("Positive Divergence Stocks:", divergence_candidates)
-print("Momentum Stocks:", momentum_candidates)
+df_results = pd.DataFrame(results)
+print(df_results)

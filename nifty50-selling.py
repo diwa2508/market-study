@@ -5,8 +5,8 @@ Converted from Jupyter Notebook: stock-option-selling.ipynb
 Conversion Date: 2025-10-28T16:50:35.458Z
 """
 
-%pip install nsepython
-%pip install nsetools
+#%pip install nsepython
+#%pip install nsetools
 
 import pandas as pd
 import numpy as np

@@ -5,9 +5,6 @@ Converted from Jupyter Notebook: notebook.ipynb
 Conversion Date: 2025-10-28T16:50:13.348Z
 """
 
-%pip install nsepython
-%pip install nsetools
-
 from nsepython import nse_eq_symbols
 import yfinance as yf
 import pandas as pd
